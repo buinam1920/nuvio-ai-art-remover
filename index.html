@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https: data: blob:; connect-src https: http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0c0d10">
+  <meta name="description" content="Replace AI-generated Nuvio collection art with real movie and show backdrops. Runs entirely in your browser.">
+  <title>Nuvio Art Fixer</title>
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="assets/icon.svg" alt="" width="28" height="28">
+      <span>Nuvio Art Fixer</span>
+    </div>
+    <div class="session" id="session" hidden>
+      <span class="session-who" id="session-who"></span>
+      <button type="button" class="btn ghost small" id="signout">Sign out</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Step 1: sign in -->
+    <section class="panel narrow" id="step-login" aria-labelledby="login-h">
+      <p class="eyebrow">Unofficial tool · open source</p>
+      <h1 id="login-h">Give your Nuvio collections real artwork</h1>
+      <p class="lede">Swap AI-generated tile art for real movie and show backdrops. Your collections, tiles and catalogs stay exactly as they are. Only the artwork changes.</p>
+
+      <form id="login-form" class="stack" autocomplete="on" novalidate>
+        <label class="field">
+          <span>Email</span>
+          <input type="email" name="email" id="email" autocomplete="username" required inputmode="email" spellcheck="false">
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input type="password" name="password" id="password" autocomplete="current-password" required>
+        </label>
+        <details class="advanced">
+          <summary>Self-hosted server</summary>
+          <label class="field">
+            <span>Server address</span>
+            <input type="url" id="server" value="https://api.nuvio.tv" spellcheck="false" autocomplete="off">
+          </label>
+          <p class="hint">Use this only if you run your own Nuvio server. The address must start with https://.</p>
+        </details>
+        <p class="sendto" id="sendto">Your password goes only to <strong id="sendto-host">api.nuvio.tv</strong>.</p>
+        <button type="submit" class="btn primary" id="login-btn">Sign in</button>
+      </form>
+
+      <aside class="privacy" aria-labelledby="privacy-h">
+        <h2 id="privacy-h">Privacy, in plain words</h2>
+        <ul>
+          <li>Everything runs in this browser tab. There is no server behind this page.</li>
+          <li>Your password is sent only to the Nuvio server shown above, and is never saved anywhere.</li>
+          <li>The sign-in token is kept in memory only. Closing or reloading the tab forgets it.</li>
+          <li>No analytics, no cookies, no tracking. Artwork comes from Cinemeta and Metahub, the public catalogs Stremio uses.</li>
+          <li>Before anything changes, a full backup of your collections is downloaded to your device.</li>
+        </ul>
+        <p class="fineprint">This tool is not made or endorsed by Nuvio. It uses the same sync API as the app, which may change without notice.</p>
+      </aside>
+    </section>
+
+    <!-- Step 2: profile -->
+    <section class="panel narrow" id="step-profile" aria-labelledby="profile-h" hidden>
+      <p class="eyebrow">Step 2 of 3</p>
+      <h1 id="profile-h">Which profile?</h1>
+      <p class="lede">Each profile has its own collections. Pick the one to fix. A backup of it downloads right away, before anything else happens.</p>
+      <ul class="profiles" id="profiles"></ul>
+    </section>
+
+    <!-- Step 3: workspace -->
+    <section id="step-work" aria-labelledby="work-h" hidden>
+      <div class="work-head">
+        <div>
+          <p class="eyebrow">Step 3 of 3 · <span id="work-profile"></span></p>
+          <h1 id="work-h">Review the new artwork</h1>
+        </div>
+        <div class="work-actions">
+          <span id="undo-wrap" hidden><button type="button" class="btn ghost small" id="undo-btn">Undo my changes</button></span>
+          <button type="button" class="btn ghost small" id="restore-btn">Restore from backup…</button>
+          <input type="file" id="restore-file" accept="application/json,.json" hidden>
+        </div>
+      </div>
+
+      <div class="backup-banner" id="backup-banner">
+        <div>
+          <strong>Backup downloaded</strong>
+          <span id="backup-name" class="mono"></span>
+          <p class="hint">Check that the file is in your Downloads. You need it to undo changes later. On some phones the download only starts when you tap the button.</p>
+        </div>
+        <div class="backup-controls">
+          <button type="button" class="btn ghost small" id="backup-again">Download again</button>
+          <label class="check"><input type="checkbox" id="backup-ok"> I have the backup file</label>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <p class="counts" id="counts"></p>
+        <div class="toolbar-actions">
+          <button type="button" class="btn ghost small" id="select-confident">Select all with art</button>
+          <button type="button" class="btn ghost small" id="skip-all">Skip all</button>
+          <details class="advanced inline">
+            <summary>TMDB key</summary>
+            <label class="field">
+              <span>TMDB API key (optional, better search)</span>
+              <input type="password" id="tmdb-key" autocomplete="off" spellcheck="false">
+            </label>
+            <p class="hint">Kept in memory for this tab only.</p>
+          </details>
+        </div>
+      </div>
+
+      <div id="groups"></div>
+
+      <div class="applybar">
+        <p class="applybar-note" id="applybar-note">Don't edit collections on another device while saving.</p>
+        <button type="button" class="btn primary" id="apply-btn" disabled>Apply selected</button>
+      </div>
+    </section>
+
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+  </main>
+
+  <dialog id="dialog" aria-labelledby="dialog-h">
+    <div class="dialog-body">
+      <h2 id="dialog-h"></h2>
+      <div id="dialog-content"></div>
+      <div class="dialog-actions">
+        <button type="button" class="btn ghost" id="dialog-cancel">Cancel</button>
+        <button type="button" class="btn primary" id="dialog-ok">Continue</button>
+      </div>
+    </div>
+  </dialog>
+
+  <footer class="foot">
+    <span>MIT licensed · Not affiliated with Nuvio</span>
+  </footer>
+</body>
+</html>

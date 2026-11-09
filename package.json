@@ -1,0 +1,12 @@
+{
+  "name": "nuvio-art-fixer",
+  "version": "1.0.0",
+  "description": "Browser-only tool that replaces AI-generated Nuvio collection art with real movie and show artwork.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test",
+    "start": "python -m http.server 8000"
+  }
+}
