@@ -2,6 +2,8 @@
 // The password is passed straight to the auth endpoint and never kept.
 // The access token lives only inside this closure, in memory.
 
+import { assertLosslessNumbers, assertJsonLimits } from './collections.js';
+
 export const DEFAULT_SERVER = 'https://api.nuvio.tv';
 
 export class ApiError extends Error {
@@ -59,6 +61,7 @@ export function createClient({ server = DEFAULT_SERVER, fetch: fetchImpl = globa
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     let res;
+    let text;
     try {
       res = await fetchImpl(url, {
         method,
@@ -68,14 +71,17 @@ export function createClient({ server = DEFAULT_SERVER, fetch: fetchImpl = globa
         credentials: 'omit',
         cache: 'no-store',
         referrerPolicy: 'no-referrer',
+        // Never follow redirects: a redirect could carry the password (or token) to a host the user never saw.
+        redirect: 'error',
       });
+      // The timeout also covers reading the body, so a stalled response cannot hang the app.
+      text = await res.text();
     } catch (err) {
       if (err?.name === 'AbortError') throw new ApiError('The server took too long to answer.', { kind: 'timeout' });
-      throw new ApiError('Could not reach the server. Check your connection.', { kind: 'network' });
+      throw new ApiError('Could not reach the server (or it tried to redirect). Check your connection and server address.', { kind: 'network' });
     } finally {
       clearTimeout(timer);
     }
-    const text = await res.text().catch(() => '');
     let data = null;
     if (text) {
       try {
@@ -90,6 +96,14 @@ export function createClient({ server = DEFAULT_SERVER, fetch: fetchImpl = globa
       throw new ApiError(String(msg).slice(0, 300), { status: res.status, code: data?.code ?? data?.error_code ?? null });
     }
     if (text && data === null) throw new ApiError('The server sent a response that is not JSON.', { status: res.status, kind: 'shape' });
+    if (text) {
+      try {
+        assertLosslessNumbers(text);
+        assertJsonLimits(data);
+      } catch (err) {
+        throw new ApiError(err.message, { status: res.status, kind: 'shape' });
+      }
+    }
     return data;
   }
 

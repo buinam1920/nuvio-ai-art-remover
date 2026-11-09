@@ -15,8 +15,6 @@ export const ART_FIELDS = Object.freeze([
 export const BACKUP_FORMAT = 'nuvio-art-fixer-backup';
 export const BACKUP_VERSION = 1;
 
-const SEP = '::';
-
 export class DataError extends Error {
   constructor(message) {
     super(message);
@@ -27,8 +25,9 @@ export class DataError extends Error {
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
 
+/** Unambiguous key for a tile: ids may contain any characters, so encode the pair as JSON. */
 export function tileKey(collectionId, folderId) {
-  return `${collectionId}${SEP}${folderId}`;
+  return JSON.stringify([collectionId, folderId]);
 }
 
 /** Key-order-insensitive deep equality for JSON values. */
@@ -46,16 +45,79 @@ export function deepEqual(a, b) {
   return ka.every((k) => Object.prototype.hasOwnProperty.call(b, k) && deepEqual(a[k], b[k]));
 }
 
+// ---------- Safe JSON parsing ----------
+
+/** Canonical (digits, exponent) form of a decimal string, for exact comparison. */
+function canonicalDecimal(str) {
+  const m = /^(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(str);
+  if (!m) return null;
+  const digits = (m[2] + (m[3] || '')).replace(/^0+/, '');
+  let exp = Number(m[4] || 0) - (m[3] || '').length;
+  const trimmed = digits.replace(/0+$/, '');
+  exp += digits.length - trimmed.length;
+  if (!trimmed) return '0';
+  return `${m[1]}${trimmed}e${exp}`;
+}
+
+/**
+ * Throw if the JSON text contains a number that JavaScript would silently change when parsing
+ * (e.g. 9007199254740993 -> 9007199254740992). Writing such data back would corrupt it.
+ */
+export function assertLosslessNumbers(text) {
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    const ch = text[i];
+    if (ch === '"') {
+      i++;
+      while (i < n && text[i] !== '"') i += text[i] === '\\' ? 2 : 1;
+      i++;
+    } else if (ch === '-' || (ch >= '0' && ch <= '9')) {
+      let j = i + 1;
+      while (j < n && /[0-9.eE+-]/.test(text[j])) j++;
+      const token = text.slice(i, j);
+      const value = Number(token);
+      if (Number.isFinite(value) && canonicalDecimal(token) !== canonicalDecimal(String(value))) {
+        throw new DataError(`The data contains a number (${token.slice(0, 30)}) that cannot be handled exactly in a browser. Stopping so nothing gets changed.`);
+      }
+      i = j;
+    } else i++;
+  }
+}
+
+export const LIMITS = Object.freeze({ maxDepth: 64, maxNodes: 500000 });
+
+/** Iteratively check nesting depth and size so hostile files cannot crash later steps. */
+export function assertJsonLimits(value, { maxDepth = LIMITS.maxDepth, maxNodes = LIMITS.maxNodes } = {}) {
+  const stack = [[value, 0]];
+  let nodes = 0;
+  while (stack.length) {
+    const [v, d] = stack.pop();
+    if (++nodes > maxNodes) throw new DataError('The data is too large to handle safely.');
+    if (v === null || typeof v !== 'object') continue;
+    if (d >= maxDepth) throw new DataError('The data is nested too deeply to handle safely.');
+    for (const k of Object.keys(v)) stack.push([v[k], d + 1]);
+  }
+}
+
+/** JSON.parse with the lossless-number and size checks. */
+export function safeJsonParse(text, what = 'data') {
+  let v;
+  try {
+    v = JSON.parse(text);
+  } catch {
+    throw new DataError(`The ${what} is not valid JSON.`);
+  }
+  assertLosslessNumbers(text);
+  assertJsonLimits(v);
+  return v;
+}
+
 /** Parse collections_json, which the server may return as a JSON string or as an array. */
 export function parseCollectionsJson(value) {
   let v = value;
-  if (typeof v === 'string') {
-    try {
-      v = JSON.parse(v);
-    } catch {
-      throw new DataError('collections_json is not valid JSON.');
-    }
-  }
+  if (typeof v === 'string') v = safeJsonParse(v, 'collections_json');
+  else assertJsonLimits(v);
   if (!Array.isArray(v)) throw new DataError('collections_json is not a list of collections.');
   return v;
 }
@@ -263,12 +325,7 @@ export function backupFileName(profileId, now = new Date()) {
  * Returns { collections, meta } where meta may lack identity fields (callers must warn).
  */
 export function parseBackup(text) {
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new DataError('That file is not valid JSON.');
-  }
+  const data = safeJsonParse(text, 'file');
   let collections;
   let meta = { server: null, userId: null, profileId: null, updatedAt: null, createdAt: null, kind: 'unknown' };
   if (isObj(data) && data.format === BACKUP_FORMAT) {
@@ -314,8 +371,14 @@ export function checkBackupIdentity(meta, session) {
   if (meta.profileId != null && Number(meta.profileId) !== Number(session.profileId)) {
     errors.push(`Backup is for profile ${meta.profileId}, but profile ${session.profileId} is selected.`);
   }
-  if (meta.kind !== 'tool') {
-    warnings.push('This file has no account information, so the tool cannot confirm it belongs to this account and profile.');
+  const missing = [];
+  if (!meta.server) missing.push('server');
+  if (!meta.userId || !session.userId) missing.push('account');
+  if (meta.profileId == null) missing.push('profile');
+  if (missing.length) {
+    warnings.push(
+      `This file does not say which ${missing.join(', ')} it belongs to, so the tool cannot confirm it is yours. Only continue if you are sure it is the right backup.`,
+    );
   }
   return { errors, warnings };
 }
@@ -325,15 +388,24 @@ export function checkBackupIdentity(meta, session) {
  * backup for tiles that exist in both (matched by collection id + tile id). Fields absent in the
  * backup are removed again. Collections/tiles added since the backup are left alone.
  */
-export function buildArtRestore(current, backup) {
+export function buildArtRestore(current, backup, { only } = {}) {
   const backupTiles = new Map();
   for (const c of backup) for (const f of Array.isArray(c.folders) ? c.folders : []) backupTiles.set(tileKey(c.id, f.id), f);
   const changes = [];
+  const changedElsewhere = [];
   let matched = 0;
   const next = mapTiles(current, (c, f) => {
     const key = tileKey(c.id, f.id);
     const old = backupTiles.get(key);
     if (!old) return f;
+    if (only) {
+      // Undo mode: touch only tiles this session wrote, and only if nobody changed them since.
+      if (!only.has(key)) return f;
+      if (!deepEqual(pickArt(f), only.get(key))) {
+        changedElsewhere.push(`${c.title ?? c.id} / ${f.title ?? ''}`);
+        return f;
+      }
+    }
     matched++;
     const updated = { ...f };
     for (const k of ART_FIELDS) {
@@ -345,8 +417,9 @@ export function buildArtRestore(current, backup) {
     return updated;
   });
   const currentKeys = new Set(listTiles(current).map((t) => t.key));
-  const notInCurrent = [...backupTiles.keys()].filter((k) => !currentKeys.has(k));
-  return { collections: next, changes, matched, notInCurrent };
+  const wanted = only ? [...only.keys()] : [...backupTiles.keys()];
+  const notInCurrent = wanted.filter((k) => !currentKeys.has(k));
+  return { collections: next, changes, matched, notInCurrent, changedElsewhere };
 }
 
 /**

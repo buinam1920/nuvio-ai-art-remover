@@ -16,17 +16,24 @@ export async function pullSnapshot(client, profileId) {
   return parsePullResponse(rows, profileId);
 }
 
+/** Errors where the request may still reach the server after we gave up on it. */
+const isTransportFailure = (err) => err?.kind === 'timeout' || err?.kind === 'network';
+
 /**
  * guardedWrite:
  *  1. Re-pull right before writing and make sure nothing changed since `base` was read
  *     (same updated_at AND same content). Otherwise abort: another device edited collections.
  *  2. Push the full payload.
  *  3. Re-pull and check the server now holds exactly the payload.
- * If the push itself fails (timeout, network), re-pull and classify the outcome instead of
- * retrying, so a write that actually landed is never repeated or rolled back automatically.
+ * If the push itself fails, re-pull and classify the outcome instead of retrying, so a write
+ * that actually landed is never repeated or rolled back automatically.
  *
- * Returns { status: 'applied', snapshot } or throws. Thrown errors carry `.outcome`
- * ('unchanged' | 'applied' | 'conflict' | 'unknown') when a push was attempted.
+ * Returns { status: 'applied' | 'nothing-to-do', snapshot, note? } or throws.
+ * Errors thrown after a push was attempted carry `.outcome`:
+ *   'unchanged' - the server rejected the save; it still holds the old data
+ *   'pending'   - the request failed in transit; the server shows old data now, but the save may still land
+ *   'conflict'  - the server holds something other than old data or the payload
+ *   'unknown'   - the tool could not read back what the server holds
  */
 export async function guardedWrite({ client, profileId, base, payload, onStep = () => {} }) {
   if (!Array.isArray(payload) || payload.length === 0) throw new DataError('Refusing to write an empty collection set.');
@@ -48,21 +55,31 @@ export async function guardedWrite({ client, profileId, base, payload, onStep = 
   } catch (err) {
     onStep('Save did not confirm. Checking what the server holds…');
     let outcome = 'unknown';
+    let after = null;
     try {
-      const after = await pullSnapshot(client, profileId);
+      after = await pullSnapshot(client, profileId);
       outcome = classifyWrite(after.collections, payload, fresh.collections);
     } catch {
       /* keep 'unknown' */
     }
     if (outcome === 'applied') {
-      return { status: 'applied', snapshot: await pullSnapshot(client, profileId), note: 'The save landed even though the server did not confirm it.' };
+      return { status: 'applied', snapshot: after, note: 'The save landed even though the server did not confirm it.' };
     }
+    if (outcome === 'unchanged' && isTransportFailure(err)) outcome = 'pending';
     err.outcome = outcome;
+    if (after) err.snapshot = after;
     throw err;
   }
 
   onStep('Verifying…');
-  const after = await pullSnapshot(client, profileId);
+  let after;
+  try {
+    after = await pullSnapshot(client, profileId);
+  } catch (err) {
+    // The push went through but we could not read it back (e.g. session expired, network).
+    err.outcome = 'unknown';
+    throw err;
+  }
   const outcome = classifyWrite(after.collections, payload, fresh.collections);
   if (outcome !== 'applied') {
     const e = new Error(

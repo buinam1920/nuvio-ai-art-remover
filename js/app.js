@@ -11,6 +11,7 @@ import {
   buildArtRestore,
   buildFullRestore,
   nonArtDifferences,
+  deepEqual,
   DataError,
 } from './collections.js';
 import { guardedWrite, pullSnapshot, ConflictError } from './workflow.js';
@@ -44,6 +45,7 @@ const state = {
   vms: [], // one view model per tile
   busy: false,
   tmdbKey: '',
+  sessionWrites: new Map(), // tileKey -> art fields this session last wrote (for a safe Undo)
 };
 
 // ---------- Status + dialog ----------
@@ -177,14 +179,21 @@ $('login-form').addEventListener('submit', async (e) => {
 
 $('signout').addEventListener('click', async () => {
   if (state.busy) return;
-  await state.client?.logout();
-  Object.assign(state, { client: null, profile: null, base: null, sessionBackup: null, vms: [], tmdbKey: '' });
-  $('tmdb-key').value = '';
-  $('groups').replaceChildren();
-  $('session').hidden = true;
-  $('backup-ok').checked = false;
-  show('step-login');
-  setStatus('Signed out. Nothing is kept in this tab.', 'ok');
+  setBusy(true);
+  setStatus('Signing out…');
+  try {
+    await state.client?.logout();
+  } finally {
+    Object.assign(state, { client: null, profile: null, base: null, sessionBackup: null, vms: [], tmdbKey: '', sessionWrites: new Map() });
+    $('tmdb-key').value = '';
+    $('groups').replaceChildren();
+    $('session').hidden = true;
+    $('undo-wrap').hidden = true;
+    $('backup-ok').checked = false;
+    show('step-login');
+    setBusy(false);
+    setStatus('Signed out. Nothing is kept in this tab.', 'ok');
+  }
 });
 
 function handleAuthLoss(err) {
@@ -275,7 +284,7 @@ $('backup-ok').addEventListener('change', () => setBusy(state.busy));
 
 function renderWorkspace() {
   const tiles = listTiles(state.base.collections);
-  state.vms = tiles.map((t) => ({ t, candidates: [], pick: null, skip: true, status: 'loading', msg: 'Finding artwork…', broken: new Set(), done: false, el: null }));
+  state.vms = tiles.map((t) => ({ t, candidates: [], pick: null, skip: true, status: 'loading', msg: 'Finding artwork…', broken: new Set(), done: false, el: null, gen: 0, userTouched: false }));
   const groups = new Map();
   for (const vm of state.vms) {
     if (!groups.has(vm.t.collectionId)) groups.set(vm.t.collectionId, { id: vm.t.collectionId, title: vm.t.collectionTitle, vms: [] });
@@ -314,6 +323,8 @@ function renderCard(vm) {
       vm.msg = 'Pick an image first.';
       return updateCard(vm);
     }
+    vm.userTouched = true;
+    vm.gen++; // cancel any pending image check for this tile
     vm.skip = skip.checked;
     updateCard(vm);
     updateCounts();
@@ -365,7 +376,7 @@ function updateCard(vm) {
         h('span', {}, c.name),
       );
       thumb.addEventListener('error', () => b.classList.add('noimg'), { once: true });
-      b.addEventListener('click', () => choose(vm, c));
+      b.addEventListener('click', () => choose(vm, c, { auto: false }));
       return b;
     }),
   );
@@ -389,11 +400,20 @@ function updateCounts() {
     : "Don't edit collections on another device while saving.";
 }
 
-/** Use a candidate only after its backdrop is confirmed to load. */
-async function choose(vm, c) {
+/**
+ * Use a candidate only after its backdrop is confirmed to load.
+ * Each tile has a generation counter: a newer action (another pick, skip, search) makes
+ * older pending checks stale so they cannot overwrite it. Automatic picks never override the user.
+ * Returns true when the caller should stop trying further candidates.
+ */
+async function choose(vm, c, { auto = true } = {}) {
+  if (auto && vm.userTouched) return true;
+  if (!auto) vm.userTouched = true;
+  const gen = ++vm.gen;
   vm.msg = 'Checking image…';
   updateCard(vm);
   const ok = await checkImage(c.backdropUrl);
+  if (gen !== vm.gen || (auto && vm.userTouched)) return true;
   if (!ok) {
     vm.broken.add(c.imdb);
     vm.msg = `No image available for ${c.name}.`;
@@ -410,12 +430,15 @@ async function choose(vm, c) {
 }
 
 async function loadOne(vm) {
+  let candidates = [];
   try {
-    vm.candidates = await suggest(vm.t.title, vm.t.catalogSources, { limit: 6, tmdbKey: state.tmdbKey || undefined });
+    candidates = await suggest(vm.t.title, vm.t.catalogSources, { limit: 6, tmdbKey: state.tmdbKey || undefined });
   } catch {
-    vm.candidates = [];
+    candidates = [];
   }
   vm.status = 'ready';
+  if (vm.userTouched) return updateCounts(); // the user already searched or picked; keep their view
+  vm.candidates = candidates;
   const confident = vm.candidates.filter((c) => c.score >= CONFIDENT);
   for (const c of confident) {
     if (await choose(vm, c)) return;
@@ -426,9 +449,10 @@ async function loadOne(vm) {
 }
 
 async function loadSuggestions() {
-  const queue = [...state.vms];
+  const session = state.vms;
+  const queue = [...session];
   const worker = async () => {
-    while (queue.length) await loadOne(queue.shift());
+    while (queue.length && state.vms === session) await loadOne(queue.shift());
   };
   await Promise.all(Array.from({ length: 4 }, worker));
   updateCounts();
@@ -438,6 +462,8 @@ async function loadSuggestions() {
 async function doSearch(vm, query) {
   const qs = query.trim();
   if (!qs) return;
+  vm.userTouched = true;
+  const gen = ++vm.gen;
   vm.msg = 'Searching…';
   updateCard(vm);
   let results = [];
@@ -446,18 +472,27 @@ async function doSearch(vm, query) {
   } catch {
     results = [];
   }
+  if (gen !== vm.gen) return;
   vm.candidates = results;
   vm.msg = results.length ? 'Tap an image to use it.' : 'Nothing found. Try another title.';
   updateCard(vm);
 }
 
 $('select-confident').addEventListener('click', () => {
-  for (const vm of state.vms) if (vm.pick) vm.skip = false;
+  for (const vm of state.vms) {
+    if (!vm.pick) continue;
+    vm.skip = false;
+    vm.userTouched = true;
+  }
   state.vms.forEach(updateCard);
   updateCounts();
 });
 $('skip-all').addEventListener('click', () => {
-  for (const vm of state.vms) vm.skip = true;
+  for (const vm of state.vms) {
+    vm.skip = true;
+    vm.userTouched = true;
+    vm.gen++; // cancel pending image checks so they cannot un-skip
+  }
   state.vms.forEach(updateCard);
   updateCounts();
 });
@@ -506,20 +541,28 @@ $('apply-btn').addEventListener('click', async () => {
 async function runWrite(payload, successMsg) {
   setBusy(true);
   try {
+    const before = new Map(listTiles(state.base.collections).map((t) => [t.key, t.art]));
     const r = await guardedWrite({ client: state.client, profileId: state.profile.id, base: state.base, payload, onStep: (s) => setStatus(s) });
+    for (const t of listTiles(r.snapshot.collections)) {
+      const was = before.get(t.key);
+      if (was && !deepEqual(was, t.art)) state.sessionWrites.set(t.key, t.art);
+    }
     state.base = r.snapshot;
     refreshCurrentArt(true);
     $('undo-wrap').hidden = false;
     setStatus(r.status === 'nothing-to-do' ? 'Nothing needed saving.' : `${successMsg}${r.note ? ` (${r.note})` : ''}`, 'ok');
   } catch (err) {
+    const authLost = err instanceof ApiError && err.status === 401;
+    // If a push was attempted, always explain what may have happened, even when the session also expired.
+    if (err.outcome) await reportWriteError(err, { reload: !authLost });
     if (handleAuthLoss(err)) return;
-    await reportWriteError(err);
+    if (!err.outcome) await reportWriteError(err);
   } finally {
     setBusy(false);
   }
 }
 
-async function reportWriteError(err) {
+async function reportWriteError(err, { reload = true } = {}) {
   if (err instanceof ConflictError) {
     const reload = await ask({ title: 'Collections changed elsewhere', body: [h('p', {}, err.message)], ok: 'Reload collections', cancel: 'Close' });
     if (reload) await reloadBase();
@@ -528,11 +571,13 @@ async function reportWriteError(err) {
   const outcome = err.outcome;
   const lines = {
     unchanged: 'Nothing was saved. Your collections are as they were.',
+    pending:
+      "The server didn't confirm the save in time. It still shows your old collections, but the save may yet go through. Wait a minute, then check Nuvio before trying again. Your backup file is unaffected.",
     conflict: 'The server now holds something different from what was sent. Your backup file is unaffected. Check Nuvio; if something looks wrong, use "Restore from backup".',
     unknown: 'The tool could not confirm what the server holds now. Check Nuvio. Your backup file is unaffected.',
   };
   await tell('Save did not complete', [h('p', {}, errorText(err)), outcome ? h('p', {}, lines[outcome] || '') : null].filter(Boolean));
-  if (outcome === 'conflict' || outcome === 'unknown') await reloadBase();
+  if (reload && outcome && outcome !== 'unchanged') await reloadBase();
 }
 
 async function reloadBase() {
@@ -597,11 +642,22 @@ $('restore-file').addEventListener('change', async (e) => {
 
 $('undo-btn').addEventListener('click', async () => {
   if (state.busy || !state.sessionBackup) return;
-  const parsed = parseBackup(JSON.stringify(state.sessionBackup.backup));
-  await startRestore(parsed, 'the backup from the start of this session', { artOnly: true });
+  if (!state.sessionWrites.size) return setStatus('Nothing to undo.', 'ok');
+  const parsed = { collections: state.sessionBackup.backup.collections, meta: { ...state.sessionBackup.backup, kind: 'tool' } };
+  await startRestore(parsed, 'the backup from the start of this session', { artOnly: true, only: state.sessionWrites });
 });
 
-async function startRestore(parsed, label, { artOnly = false } = {}) {
+async function startRestore(parsed, label, opts = {}) {
+  try {
+    await prepareRestore(parsed, label, opts);
+  } catch (err) {
+    if (state.busy) setBusy(false);
+    await tell('Cannot restore', [h('p', {}, errorText(err)), h('p', {}, 'Nothing was changed.')]);
+  }
+}
+
+async function prepareRestore(parsed, label, { artOnly = false, only } = {}) {
+  if (!state.client || !state.profile) return;
   const session = { server: state.client.server, userId: state.client.user?.id, profileId: state.profile.id };
   const { errors, warnings } = checkBackupIdentity(parsed.meta, session);
   if (errors.length) return tell('This backup does not match', errors.map((m) => h('p', {}, m)));
@@ -618,7 +674,7 @@ async function startRestore(parsed, label, { artOnly = false } = {}) {
   setBusy(false);
   setStatus('');
 
-  const art = buildArtRestore(fresh.collections, parsed.collections);
+  const art = buildArtRestore(fresh.collections, parsed.collections, { only });
   const full = buildFullRestore(fresh.collections, parsed.collections);
   const fullLoss = full.removedCollections.length + full.removedTiles.length;
 
@@ -629,7 +685,11 @@ async function startRestore(parsed, label, { artOnly = false } = {}) {
     ...warnings.map((w) => h('p', { class: 'callout warn' }, w)),
   ];
   if (artOnly) {
-    body.push(h('p', {}, `Puts back the original artwork on ${art.changes.length} tile${art.changes.length === 1 ? '' : 's'}. Nothing else changes.`));
+    body.push(h('p', {}, `Puts back the original artwork on the ${art.changes.length} tile${art.changes.length === 1 ? '' : 's'} this session changed. Nothing else changes.`));
+    if (art.changedElsewhere.length) {
+      const names = art.changedElsewhere.slice(0, 5).join(', ') + (art.changedElsewhere.length > 5 ? '…' : '');
+      body.push(h('p', { class: 'callout warn' }, `${art.changedElsewhere.length} tile(s) were changed again after this session saved them (maybe on another device) and will be left alone: ${names}`));
+    }
   } else {
     body.push(
       h(
