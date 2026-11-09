@@ -1,7 +1,7 @@
 {
-  "name": "nuvio-art-fixer",
+  "name": "nuvio-ai-art-remover",
   "version": "1.0.0",
-  "description": "Browser-only tool that replaces AI-generated Nuvio collection art with real movie and show artwork.",
+  "description": "Browser-only tool that removes AI-generated Nuvio collection art and uses real movie and show artwork instead.",
   "type": "module",
   "private": true,
   "license": "MIT",

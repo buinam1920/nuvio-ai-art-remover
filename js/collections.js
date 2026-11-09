@@ -12,6 +12,7 @@ export const ART_FIELDS = Object.freeze([
   'hideTitle',
 ]);
 
+// Format id stored inside backup files. Kept from the tool's original name so older backups still restore.
 export const BACKUP_FORMAT = 'nuvio-art-fixer-backup';
 export const BACKUP_VERSION = 1;
 

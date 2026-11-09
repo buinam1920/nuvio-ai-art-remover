@@ -1,10 +1,10 @@
 <img src="assets/icon.svg" width="56" height="56" alt="">
 
-# Nuvio Art Fixer
+# Nuvio AI Art Remover
 
-A small browser-only tool that swaps the AI-generated artwork on your [Nuvio](https://nuvio.tv) collection tiles for real movie and show backdrops. Your collections, tile names, catalogs and order stay exactly as they are. Only the artwork changes.
+A small browser-only tool that removes the AI-generated artwork ("AI slop") from your [Nuvio](https://nuvio.tv) collection tiles and puts real movie and show backdrops there instead. Your collections, tile names, catalogs and order stay exactly as they are. Only the artwork changes.
 
-**Use it here: <https://buinam1920.github.io/nuvio-art-fixer/>**
+**Use it here: <https://buinam1920.github.io/nuvio-ai-art-remover/>**
 
 > **Unofficial.** This project is not made, endorsed or supported by Nuvio. It talks to the same sync API the Nuvio apps use. That API is not documented for third parties and may change at any time, which could break this tool. Use it at your own risk, and keep the backup it gives you.
 
@@ -49,8 +49,8 @@ One limit: the API has no way to lock your collections, so a change made on anot
 No build step and no dependencies. ES modules need to be served over HTTP, so any static server works:
 
 ```sh
-git clone https://github.com/buinam1920/nuvio-art-fixer.git
-cd nuvio-art-fixer
+git clone https://github.com/buinam1920/nuvio-ai-art-remover.git
+cd nuvio-ai-art-remover
 python -m http.server 8000
 ```
 

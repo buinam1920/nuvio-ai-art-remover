@@ -117,7 +117,7 @@ test('pull and push use the RPC contract', async () => {
   const push = fetch.calls.at(-1).body;
   assert.equal(push.p_profile_id, 2);
   assert.deepEqual(push.p_collections_json, [{ id: 'c', folders: [] }], 'sent as JSON array, not a string');
-  assert.match(push.p_origin_client_id, /^nuvio-art-fixer-/);
+  assert.match(push.p_origin_client_id, /^nuvio-ai-art-remover-/);
 });
 
 test('push refuses an empty set without calling the server', async () => {

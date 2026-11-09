@@ -7,8 +7,8 @@
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#0c0d10">
-  <meta name="description" content="Replace AI-generated Nuvio collection art with real movie and show backdrops. Runs entirely in your browser.">
-  <title>Nuvio Art Fixer</title>
+  <meta name="description" content="Remove AI-generated (AI slop) art from your Nuvio collections and use real movie and show backdrops instead. Runs entirely in your browser.">
+  <title>Nuvio AI Art Remover</title>
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
   <script type="module" src="js/app.js"></script>
@@ -17,7 +17,7 @@
   <header class="topbar">
     <div class="brand">
       <img src="assets/icon.svg" alt="" width="28" height="28">
-      <span>Nuvio Art Fixer</span>
+      <span>Nuvio AI Art Remover</span>
     </div>
     <div class="session" id="session" hidden>
       <span class="session-who" id="session-who"></span>
@@ -29,8 +29,8 @@
     <!-- Step 1: sign in -->
     <section class="panel narrow" id="step-login" aria-labelledby="login-h">
       <p class="eyebrow">Unofficial tool · open source</p>
-      <h1 id="login-h">Give your Nuvio collections real artwork</h1>
-      <p class="lede">Swap AI-generated tile art for real movie and show backdrops. Your collections, tiles and catalogs stay exactly as they are. Only the artwork changes.</p>
+      <h1 id="login-h">Remove the AI art from your Nuvio collections</h1>
+      <p class="lede">Replace AI-generated tile art (the "AI slop") with real movie and show backdrops. Your collections, tiles and catalogs stay exactly as they are. Only the artwork changes.</p>
 
       <form id="login-form" class="stack" autocomplete="on" novalidate>
         <label class="field">
@@ -139,7 +139,7 @@
   </dialog>
 
   <footer class="foot">
-    <a href="https://github.com/buinam1920/nuvio-art-fixer" rel="noopener noreferrer">Source code</a>
+    <a href="https://github.com/buinam1920/nuvio-ai-art-remover" rel="noopener noreferrer">Source code</a>
     <span>MIT licensed · Not affiliated with Nuvio</span>
   </footer>
 </body>

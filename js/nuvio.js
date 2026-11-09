@@ -35,7 +35,7 @@ export function assertSafeServerUrl(raw) {
 function newClientId() {
   const c = globalThis.crypto;
   const id = c?.randomUUID ? c.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  return `nuvio-art-fixer-${id}`;
+  return `nuvio-ai-art-remover-${id}`;
 }
 
 /**
