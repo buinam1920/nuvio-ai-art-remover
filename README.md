@@ -99,6 +99,14 @@ Layout:
 | `js/images.js` | Checks that a backdrop loads before it is used |
 | `tools/mock-server.mjs` | Fake Nuvio server for development and end-to-end tests |
 
+## How it was built
+
+Built with AI coding agents, coordinated in T3 Code:
+
+- **Claude Opus 5.5:** design, the Nuvio client, data layer, guarded write, UI, fake server, end-to-end tests and docs.
+- **GPT-6 Astra (Codex):** reviewed the plan before any code was written; rewrote large parts of the art engine (`js/art.js`) and wrote its tests; did the independent security and correctness review, whose 11 findings are fixed and covered by regression tests.
+- **Gemini 4 Argon:** produced the first draft of `js/seed-map.js` and `js/art.js` (including checking the extra IMDb ids against Cinemeta and Metahub), then stalled twice without finishing or writing tests. The art engine as shipped is mostly the Codex rework.
+
 ## License
 
 [MIT](LICENSE)
