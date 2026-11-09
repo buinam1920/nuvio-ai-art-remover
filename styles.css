@@ -54,7 +54,7 @@ h3 { font-size: 1rem; font-weight: 600; }
   background: rgb(12 13 16 / 0.92);
   backdrop-filter: blur(8px);
 }
-.brand { display: flex; align-items: center; gap: 0.6rem; font-weight: 650; }
+.brand { display: flex; align-items: center; gap: 0.6rem; font-weight: 650; white-space: nowrap; }
 .session { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
 .session-who { color: var(--muted); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -98,7 +98,7 @@ input:focus { border-color: var(--accent); outline: none; }
   background: var(--surface-2);
   transition: background 0.15s, border-color 0.15s, opacity 0.15s;
 }
-.btn.small { padding: 0.4rem 0.75rem; min-height: 36px; font-size: 0.875rem; }
+.btn.small { padding: 0.4rem 0.75rem; min-height: 36px; font-size: 0.875rem; white-space: nowrap; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); }
 .btn.primary:hover:not(:disabled) { background: #ffc65e; }
 .btn.ghost { background: transparent; border-color: var(--line); }
@@ -231,6 +231,10 @@ dialog::backdrop { background: rgb(0 0 0 / 0.6); }
 .radios label { display: flex; gap: 0.6rem; align-items: start; padding: 0.6rem 0.75rem; border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; }
 .radios input { margin-top: 0.25rem; accent-color: var(--accent); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 0.6rem; flex-wrap: wrap; }
+
+@media (max-width: 420px) {
+  .session-who { display: none; }
+}
 
 @media (max-width: 560px) {
   main { padding-top: 1.25rem; }

@@ -47,7 +47,7 @@ One limit: the API has no way to lock your collections, so a change made on anot
 No build step and no dependencies. ES modules need to be served over HTTP, so any static server works:
 
 ```sh
-git clone <this-repo-url> nuvio-art-fixer
+git clone https://github.com/buinam1920/nuvio-art-fixer.git
 cd nuvio-art-fixer
 python -m http.server 8000
 ```
@@ -75,7 +75,16 @@ Tests cover the pure logic (parsing, matching, merging art fields without touchi
 node --test
 ```
 
-Requires Node 20 or newer. Layout:
+Requires Node 20 or newer.
+
+To try the whole flow without a real account, run the fake Nuvio server and sign in to it from the page (*Self-hosted server* → `http://localhost:8787`, email `test@example.com`, password `test`):
+
+```sh
+node tools/mock-server.mjs     # fake Nuvio API on :8787
+python -m http.server 8000     # the app on :8000
+```
+
+Layout:
 
 | File | Purpose |
 | --- | --- |
@@ -86,6 +95,7 @@ Requires Node 20 or newer. Layout:
 | `js/workflow.js` | Guarded write: re-check → save → verify |
 | `js/art.js`, `js/seed-map.js` | Art suggestion engine and built-in picks |
 | `js/images.js` | Checks that a backdrop loads before it is used |
+| `tools/mock-server.mjs` | Fake Nuvio server for development and end-to-end tests |
 
 ## License
 
