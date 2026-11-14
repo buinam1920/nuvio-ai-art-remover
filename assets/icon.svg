@@ -1,6 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
   <rect width="64" height="64" rx="14" fill="#16181d"/>
-  <rect x="10" y="18" width="44" height="28" rx="4" fill="none" stroke="#f2b544" stroke-width="4"/>
-  <path d="M14 42l11-11 8 8 6-6 11 11" fill="none" stroke="#f2b544" stroke-width="4" stroke-linejoin="round"/>
-  <circle cx="42" cy="27" r="3.5" fill="#f2b544"/>
+  <path fill="#f2b544" fill-rule="evenodd" d="
+    M15 17H49Q55 17 55 23V45Q55 51 49 51H15Q9 51 9 45V23Q9 17 15 17Z
+    M21.5 24H42.5V44H21.5Z
+    M12.5 24H17.5V31H12.5Z
+    M12.5 37H17.5V44H12.5Z
+    M46.5 24H51.5V31H46.5Z
+    M46.5 37H51.5V44H46.5Z"/>
+  <path fill="#f2b544" d="M28 32Q29 36.5 33.5 37.5Q29 38.5 28 43Q27 38.5 22.5 37.5Q27 36.5 28 32Z"/>
+  <path fill="#f5f1e8" stroke="#16181d" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" d="
+    M31 28L44 15Q46 13 48 15L54 21Q56 23 54 25L41 38Z
+    M37 22L47 32"/>
 </svg>
