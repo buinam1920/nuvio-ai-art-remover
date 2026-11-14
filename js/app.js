@@ -334,6 +334,8 @@ function renderCard(vm) {
   const runSearch = () => doSearch(vm, q.value);
   go.addEventListener('click', runSearch);
   q.addEventListener('keydown', (e) => {
+    // Enter while an IME is composing (Japanese, Chinese, Korean...) only confirms the characters.
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter') {
       e.preventDefault();
       runSearch();
