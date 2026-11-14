@@ -29,7 +29,7 @@
     <!-- Step 1: sign in -->
     <section class="panel narrow" id="step-login" aria-labelledby="login-h">
       <p class="eyebrow">Unofficial tool · open source</p>
-      <h1 id="login-h">Remove the AI art from your Nuvio collections</h1>
+      <h1 id="login-h" tabindex="-1">Remove the AI art from your Nuvio collections</h1>
       <p class="lede">Replace AI-generated tile art (the "AI slop") with real movie and show backdrops. Your collections, tiles and catalogs stay exactly as they are. Only the artwork changes.</p>
 
       <form id="login-form" class="stack" autocomplete="on" novalidate>
@@ -39,8 +39,9 @@
         </label>
         <label class="field">
           <span>Password</span>
-          <input type="password" name="password" id="password" autocomplete="current-password" required>
+          <input type="password" name="password" id="password" autocomplete="current-password" required spellcheck="false" autocorrect="off" autocapitalize="none">
         </label>
+        <label class="check"><input type="checkbox" id="show-pw"> Show password</label>
         <details class="advanced">
           <summary>Self-hosted server</summary>
           <label class="field">
@@ -69,7 +70,7 @@
     <!-- Step 2: profile -->
     <section class="panel narrow" id="step-profile" aria-labelledby="profile-h" hidden>
       <p class="eyebrow">Step 2 of 3</p>
-      <h1 id="profile-h">Which profile?</h1>
+      <h1 id="profile-h" tabindex="-1">Which profile?</h1>
       <p class="lede">Each profile has its own collections. Pick the one to fix. A backup of it downloads right away, before anything else happens.</p>
       <ul class="profiles" id="profiles"></ul>
     </section>
@@ -79,7 +80,7 @@
       <div class="work-head">
         <div>
           <p class="eyebrow">Step 3 of 3 · <span id="work-profile"></span></p>
-          <h1 id="work-h">Review the new artwork</h1>
+          <h1 id="work-h" tabindex="-1">Review the new artwork</h1>
         </div>
         <div class="work-actions">
           <span id="undo-wrap" hidden><button type="button" class="btn ghost small" id="undo-btn">Undo my changes</button></span>

@@ -99,7 +99,8 @@ const tell = (title, body) => ask({ title, body, ok: 'OK', cancel: null });
 
 function setBusy(on) {
   state.busy = on;
-  document.body.toggleAttribute('aria-busy', on);
+  // Deliberately no aria-busy on <body>: aria-busy="true" lets screen readers hold back updates
+  // inside it, which would silence the status live region while work is in progress.
   for (const id of ['apply-btn', 'restore-btn', 'login-btn', 'signout', 'undo-btn']) {
     const el = $(id);
     if (el) el.disabled = on || (id === 'apply-btn' && !canApply());
@@ -115,9 +116,15 @@ window.addEventListener('beforeunload', (e) => {
   }
 });
 
-function show(step) {
+const STEP_TITLES = { 'step-login': 'Sign in', 'step-profile': 'Choose a profile', 'step-work': 'Review the new artwork' };
+
+function show(step, { focus = true } = {}) {
   for (const id of ['step-login', 'step-profile', 'step-work']) $(id).hidden = id !== step;
+  document.title = `${STEP_TITLES[step]} · Nuvio AI Art Remover`;
   window.scrollTo({ top: 0 });
+  // The control that led here is now hidden, so move focus to the new step's heading
+  // instead of letting it fall back to <body>.
+  if (focus) $(step).querySelector('h1')?.focus({ preventScroll: true });
 }
 
 // ---------- Step 1: sign in ----------
@@ -139,7 +146,14 @@ $('login-form').addEventListener('submit', async (e) => {
   if (state.busy) return;
   const email = $('email').value.trim();
   const pwInput = $('password');
-  if (!email || !pwInput.value) return setStatus('Enter your email and password.', 'bad');
+  if (!email || !pwInput.value) {
+    (email ? pwInput : $('email')).focus();
+    return setStatus('Enter your email and password.', 'bad');
+  }
+  // Hide the password again before it is sent: it shouldn't stay on screen if sign-in fails,
+  // and password managers look for a type="password" field when offering to save it.
+  pwInput.type = 'password';
+  $('show-pw').checked = false;
 
   let server;
   try {
@@ -367,13 +381,16 @@ function updateCard(vm) {
   stage.replaceChildren(...kids);
 
   pickname.textContent = vm.pick ? vm.pick.name : '';
+  // The chips are rebuilt below; if one of them had keyboard focus, put focus back on the same
+  // candidate afterwards so it isn't lost to <body>.
+  const focusedImdb = chips.contains(document.activeElement) ? document.activeElement.dataset.imdb : null;
   chips.replaceChildren(
     ...vm.candidates.slice(0, 8).map((c) => {
       const broken = vm.broken.has(c.imdb);
       const thumb = h('img', { src: thumbUrl(c.backdropUrl), alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' });
       const b = h(
         'button',
-        { type: 'button', class: `chip${broken ? ' broken' : ''}`, 'aria-pressed': String(vm.pick?.imdb === c.imdb), title: c.name, disabled: broken },
+        { type: 'button', class: `chip${broken ? ' broken' : ''}`, 'aria-pressed': String(vm.pick?.imdb === c.imdb), title: c.name, disabled: broken, 'data-imdb': c.imdb },
         thumb,
         h('span', {}, c.name),
       );
@@ -382,6 +399,11 @@ function updateCard(vm) {
       return b;
     }),
   );
+  if (focusedImdb !== null) {
+    const enabled = [...chips.children].filter((b) => !b.disabled);
+    const target = enabled.find((b) => b.dataset.imdb === focusedImdb) || enabled[0] || card.querySelector('input[type="search"]');
+    target?.focus({ preventScroll: true });
+  }
   msg.textContent = vm.msg || '';
   msg.className = `tile-msg${/couldn|failed|no image/i.test(vm.msg || '') ? ' bad' : ''}`;
 }
@@ -742,5 +764,9 @@ async function prepareRestore(parsed, label, { artOnly = false, only } = {}) {
 
 // ---------- Init ----------
 
+$('show-pw').addEventListener('change', (e) => {
+  $('password').type = e.target.checked ? 'text' : 'password';
+});
+
 $('sendto-host').textContent = hostOf($('server').value || DEFAULT_SERVER);
-show('step-login');
+show('step-login', { focus: false });
